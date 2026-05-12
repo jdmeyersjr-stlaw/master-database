@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JDM Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --surface2: #1a1a1a;
+    --border: #222222;
+    --gold: #c9a84c;
+    --gold-dim: #8a6f2e;
+    --green: #4caf7d;
+    --red: #e05252;
+    --blue: #5b8dee;
+    --purple: #9b72cf;
+    --orange: #e07d3c;
+    --teal: #3cb8c4;
+    --text: #f0f0f0;
+    --text-dim: #888888;
+    --text-muted: #444444;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* HEADER */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 100;
+  }
+
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    letter-spacing: 4px;
+    color: var(--gold);
+  }
+
+  .logo span {
+    color: var(--text-dim);
+    font-size: 13px;
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 2px;
+    display: block;
+    margin-top: -4px;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    display: inline-block;
+    margin-right: 6px;
+  }
+  .status-dot.live { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.loading { background: var(--gold); animation: pulse 1s infinite; }
+  .status-dot.error { background: var(--red); }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  .status-bar {
+    display: flex;
+    gap: 20px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .refresh-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 6px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 1px;
+    transition: all 0.2s;
+  }
+  .refresh-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+  /* LAYOUT */
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: auto;
+    gap: 1px;
+    background: var(--border);
+    min-height: calc(100vh - 73px);
+  }
+
+  .panel {
+    background: var(--bg);
+    padding: 24px;
+    min-height: 400px;
+  }
+
+  .panel-wide { grid-column: span 2; }
+  .panel-full { grid-column: span 3; }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .panel-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px;
+    letter-spacing: 3px;
+    color: var(--gold);
+  }
+
+  .panel-meta {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+  }
+
+  /* CALENDAR */
+  .cal-filter {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .cal-tag {
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 1px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+    opacity: 0.5;
+  }
+  .cal-tag.active { opacity: 1; }
+  .cal-tag.business { border-color: var(--green); color: var(--green); }
+  .cal-tag.military { border-color: var(--teal); color: var(--teal); }
+  .cal-tag.personal { border-color: var(--blue); color: var(--blue); }
+  .cal-tag.school { border-color: var(--orange); color: var(--orange); }
+  .cal-tag.work { border-color: var(--purple); color: var(--purple); }
+
+  .event-list { display: flex; flex-direction: column; gap: 8px; max-height: 380px; overflow-y: auto; }
+
+  .event-item {
+    display: flex;
+    gap: 12px;
+    padding: 10px 12px;
+    background: var(--surface);
+    border-radius: 4px;
+    border-left: 3px solid var(--border);
+    transition: background 0.15s;
+  }
+  .event-item:hover { background: var(--surface2); }
+  .event-item.business { border-left-color: var(--green); }
+  .event-item.military { border-left-color: var(--teal); }
+  .event-item.personal { border-left-color: var(--blue); }
+  .event-item.school { border-left-color: var(--orange); }
+  .event-item.work { border-left-color: var(--purple); }
+
+  .event-date {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    min-width: 70px;
+    padding-top: 2px;
+  }
+
+  .event-title {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.3;
+  }
+
+  .event-loc {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  /* NOTION CRM */
+  .client-list { display: flex; flex-direction: column; gap: 6px; max-height: 420px; overflow-y: auto; }
+
+  .client-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 12px;
+    background: var(--surface);
+    border-radius: 4px;
+    font-size: 12px;
+    transition: background 0.15s;
+  }
+  .client-row:hover { background: var(--surface2); }
+
+  .client-name { font-weight: 500; font-size: 13px; }
+  .client-service { font-size: 10px; color: var(--text-dim); font-family: 'DM Mono', monospace; }
+
+  .badge {
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+  .badge-paid { background: #1a3a2a; color: var(--green); }
+  .badge-pending { background: #3a2a0a; color: var(--gold); }
+  .badge-outstanding { background: #3a1a1a; color: var(--red); }
+  .badge-signed { background: #1a2a3a; color: var(--blue); }
+
+  .amount { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text); }
+  .balance { font-family: 'DM Mono', monospace; font-size: 11px; }
+  .balance.owed { color: var(--red); }
+  .balance.clear { color: var(--green); }
+
+  /* INVENTORY */
+  .inv-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .inv-stat {
+    background: var(--surface);
+    padding: 12px;
+    border-radius: 4px;
+    text-align: center;
+  }
+
+  .inv-stat-num {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 32px;
+    color: var(--gold);
+    line-height: 1;
+  }
+
+  .inv-stat-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 1px;
+    margin-top: 4px;
+  }
+
+  .inv-list { display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow-y: auto; }
+
+  .inv-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--surface);
+    border-radius: 4px;
+    font-size: 12px;
+  }
+
+  .inv-item-name { font-weight: 500; }
+  .inv-item-loc { font-size: 10px; color: var(--text-dim); font-family: 'DM Mono', monospace; margin-top: 2px; }
+  .inv-item-val { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-dim); }
+
+  /* AI CHAT */
+  .ai-panel { background: var(--bg); }
+
+  .chat-messages {
+    height: 320px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding-right: 4px;
+  }
+
+  .msg {
+    padding: 12px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1.6;
+    max-width: 90%;
+  }
+
+  .msg-user {
+    background: var(--surface2);
+    align-self: flex-end;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  .msg-ai {
+    background: #0f1a0f;
+    border: 1px solid #1a2e1a;
+    color: var(--text);
+    align-self: flex-start;
+  }
+
+  .msg-ai .msg-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--gold);
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+
+  .chat-input-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  .chat-input {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 14px;
+    border-radius: 4px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .chat-input:focus { border-color: var(--gold); }
+  .chat-input::placeholder { color: var(--text-muted); }
+
+  .chat-send {
+    background: var(--gold);
+    color: var(--bg);
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.2s;
+  }
+  .chat-send:hover { background: #e0b85a; }
+  .chat-send:disabled { background: var(--text-muted); cursor: not-allowed; }
+
+  .quick-asks {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+
+  .quick-ask {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 5px 10px;
+    border-radius: 3px;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: 'DM Mono', monospace;
+    transition: all 0.15s;
+  }
+  .quick-ask:hover { border-color: var(--gold); color: var(--gold); }
+
+  /* MAP */
+  #map { width: 100%; height: 300px; border-radius: 4px; background: var(--surface); }
+
+  /* METRICS ROW */
+  .metrics-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 1px;
+    background: var(--border);
+  }
+
+  .metric {
+    background: var(--bg);
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .metric-val {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 36px;
+    color: var(--gold);
+    line-height: 1;
+  }
+
+  .metric-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+
+  .metric-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* LOADING STATES */
+  .skeleton {
+    background: linear-gradient(90deg, var(--surface) 25%, var(--surface2) 50%, var(--surface) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 4px;
+    height: 40px;
+    margin-bottom: 6px;
+  }
+  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 1px;
+  }
+
+  .pending-notice {
+    background: #1a150a;
+    border: 1px solid var(--gold-dim);
+    border-radius: 4px;
+    padding: 10px 14px;
+    font-size: 11px;
+    color: var(--gold-dim);
+    font-family: 'DM Mono', monospace;
+    margin-bottom: 12px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    JDM
+    <span>PRODUCTIONS DASHBOARD</span>
+  </div>
+  <div class="header-right">
+    <div class="status-bar" id="statusBar">
+      <span><span class="status-dot" id="dot-cal"></span>CALENDAR</span>
+      <span><span class="status-dot" id="dot-notion"></span>NOTION</span>
+      <span><span class="status-dot" id="dot-supabase"></span>INVENTORY</span>
+    </div>
+    <button class="refresh-btn" onclick="loadAll()">↻ REFRESH</button>
+  </div>
+</header>
+
+<!-- METRICS -->
+<div class="metrics-row" id="metricsRow">
+  <div class="metric"><div class="metric-val" id="m-revenue">—</div><div class="metric-label">YTD REVENUE</div><div class="metric-sub">from Notion ledger</div></div>
+  <div class="metric"><div class="metric-val" id="m-clients">—</div><div class="metric-label">ACTIVE CLIENTS</div><div class="metric-sub">this year</div></div>
+  <div class="metric"><div class="metric-val" id="m-outstanding">—</div><div class="metric-label">OUTSTANDING</div><div class="metric-sub">unpaid balances</div></div>
+  <div class="metric"><div class="metric-val" id="m-upcoming">—</div><div class="metric-label">UPCOMING SHOOTS</div><div class="metric-sub">next 60 days</div></div>
+  <div class="metric"><div class="metric-val" id="m-gear">—</div><div class="metric-label">BUSINESS GEAR</div><div class="metric-sub">tagged items</div></div>
+</div>
+
+<div class="grid">
+
+  <!-- CALENDAR PANEL -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">CALENDAR</div>
+      <div class="panel-meta" id="cal-meta">LOADING...</div>
+    </div>
+    <div class="cal-filter">
+      <div class="cal-tag business active" onclick="toggleCal('business',this)">BUSINESS</div>
+      <div class="cal-tag military active" onclick="toggleCal('military',this)">MILITARY</div>
+      <div class="cal-tag personal active" onclick="toggleCal('personal',this)">PERSONAL</div>
+      <div class="cal-tag school active" onclick="toggleCal('school',this)">SCHOOL</div>
+      <div class="cal-tag work active" onclick="toggleCal('work',this)">WORK</div>
+    </div>
+    <div class="event-list" id="eventList">
+      <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+    </div>
+  </div>
+
+  <!-- NOTION CRM PANEL -->
+  <div class="panel panel-wide">
+    <div class="panel-header">
+      <div class="panel-title">PROJECTS & LEDGER</div>
+      <div class="panel-meta" id="notion-meta">LOADING...</div>
+    </div>
+    <div class="client-list" id="clientList">
+      <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+    </div>
+  </div>
+
+  <!-- INVENTORY PANEL -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">BUSINESS GEAR</div>
+      <div class="panel-meta" id="inv-meta">SUPABASE</div>
+    </div>
+    <div class="inv-stats">
+      <div class="inv-stat"><div class="inv-stat-num" id="inv-total">—</div><div class="inv-stat-label">TOTAL</div></div>
+      <div class="inv-stat"><div class="inv-stat-num" id="inv-inuse">—</div><div class="inv-stat-label">IN USE</div></div>
+      <div class="inv-stat"><div class="inv-stat-num" id="inv-val">—</div><div class="inv-stat-label">EST VALUE</div></div>
+    </div>
+    <div class="inv-list" id="invList">
+      <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+    </div>
+  </div>
+
+  <!-- MAP PANEL -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">SHOOT LOCATIONS</div>
+      <div class="panel-meta">GOOGLE MAPS</div>
+    </div>
+    <div id="map"></div>
+  </div>
+
+  <!-- AI CHAT PANEL -->
+  <div class="panel panel-wide ai-panel">
+    <div class="panel-header">
+      <div class="panel-title">ASK CLAUDE</div>
+      <div class="panel-meta">CLAUDE SONNET · CONTEXT-AWARE</div>
+    </div>
+    <div class="quick-asks">
+      <div class="quick-ask" onclick="quickAsk('Who has an outstanding balance?')">outstanding balances?</div>
+      <div class="quick-ask" onclick="quickAsk('What shoots do I have coming up this month?')">upcoming shoots?</div>
+      <div class="quick-ask" onclick="quickAsk('What business gear do I have and where is it?')">gear location?</div>
+      <div class="quick-ask" onclick="quickAsk('Give me a full business summary for today.')">daily summary</div>
+      <div class="quick-ask" onclick="quickAsk('Am I free this weekend?')">weekend availability?</div>
+    </div>
+    <div class="chat-messages" id="chatMessages">
+      <div class="msg msg-ai">
+        <div class="msg-label">CLAUDE</div>
+        Hey JD — I'm connected to your calendar, Notion ledger, and inventory. Ask me anything about your business.
+      </div>
+    </div>
+    <div class="chat-input-row">
+      <input class="chat-input" id="chatInput" type="text" placeholder="Ask about your business..." onkeydown="if(event.key==='Enter')sendChat()">
+      <button class="chat-send" id="chatSend" onclick="sendChat()">SEND</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+const CONFIG = {
+  CLAUDE_API_KEY: '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',
+  GOOGLE_MAPS_KEY: 'AIzaSyDsxCJjB-oJ4YG3MtYp0Z8cDJYFCjcG9pM',
+  SUPABASE_URL: 'https://ixeigpmuewzrkhhJmqbt.supabase.co',
+  SUPABASE_ANON: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml4ZWlncG11ZXd6cmtoaGptcWJ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2MTA5NjksImV4cCI6MjA5NDE4Njk2OX0.Kz4TjRsRP4YTQ9ZOVIfffGz-qYlmN8IJ1DgO2OpI1XI',
+  NOTION_TOKEN: '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',
+  NOTION_DB: '0953190b70144672b7d7be479e21a9ce',
+  APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbz5YbJ2GoHR9amXkgXIdtmZLbFvhhQokWKCeNHSIfK_gVYQzymvM6UMnCESJduPWpSu/exec',
+  HOME: { lat: 44.6698, lng: -74.9864, label: '21 Elm St, Potsdam NY' }
+};
+
+// ============================================================
+// STATE
+// ============================================================
+let state = {
+  events: [],
+  clients: [],
+  inventory: [],
+  activeCalendars: new Set(['business','military','personal','school','work']),
+  map: null,
+  markers: []
+};
+
+// ============================================================
+// INIT
+// ============================================================
+window.addEventListener('load', () => {
+  loadAll();
+  loadMap();
+});
+
+async function loadAll() {
+  setStatus('cal', 'loading');
+  setStatus('notion', 'loading');
+  setStatus('supabase', 'loading');
+  await Promise.all([loadCalendar(), loadNotion(), loadInventory()]);
+}
+
+// ============================================================
+// STATUS
+// ============================================================
+function setStatus(key, status) {
+  const dot = document.getElementById('dot-' + key);
+  dot.className = 'status-dot ' + (status === 'live' ? 'live' : status === 'loading' ? 'loading' : 'error');
+}
+
+// ============================================================
+// GOOGLE CALENDAR
+// ============================================================
+async function loadCalendar() {
+  const el = document.getElementById('eventList');
+  if (CONFIG.APPS_SCRIPT_URL === 'PASTE_APPS_SCRIPT_WEB_APP_URL_HERE') {
+    el.innerHTML = `<div class="pending-notice">⚠ Apps Script URL not yet configured. Deploy the Google Apps Script and paste the Web App URL into CONFIG.APPS_SCRIPT_URL in this file.</div>`;
+    setStatus('cal', 'error');
+    document.getElementById('cal-meta').textContent = 'PENDING SETUP';
+    document.getElementById('m-upcoming').textContent = '—';
+    return;
+  }
+  try {
+    const res = await fetch(CONFIG.APPS_SCRIPT_URL);
+    const data = await res.json();
+    state.events = data.events || [];
+    renderCalendar();
+    setStatus('cal', 'live');
+    document.getElementById('cal-meta').textContent = state.events.length + ' EVENTS · 60 DAYS';
+    const shoots = state.events.filter(e => e.calendar === 'business').length;
+    document.getElementById('m-upcoming').textContent = shoots;
+    updateMapMarkers();
+  } catch(e) {
+    el.innerHTML = `<div class="empty-state">CALENDAR ERROR<br>${e.message}</div>`;
+    setStatus('cal', 'error');
+  }
+}
+
+function renderCalendar() {
+  const el = document.getElementById('eventList');
+  const filtered = state.events.filter(e => state.activeCalendars.has(e.calendar));
+  if (!filtered.length) { el.innerHTML = '<div class="empty-state">NO EVENTS</div>'; return; }
+  el.innerHTML = filtered.slice(0, 30).map(ev => {
+    const d = new Date(ev.start);
+    const dateStr = d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+    const timeStr = ev.allDay ? 'ALL DAY' : d.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
+    return `<div class="event-item ${ev.calendar}">
+      <div class="event-date">${dateStr}<br>${timeStr}</div>
+      <div>
+        <div class="event-title">${ev.title}</div>
+        ${ev.location ? `<div class="event-loc">📍 ${ev.location}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleCal(cal, el) {
+  if (state.activeCalendars.has(cal)) {
+    state.activeCalendars.delete(cal);
+    el.classList.remove('active');
+  } else {
+    state.activeCalendars.add(cal);
+    el.classList.add('active');
+  }
+  renderCalendar();
+}
+
+// ============================================================
+// NOTION CRM
+// ============================================================
+async function loadNotion() {
+  const el = document.getElementById('clientList');
+  try {
+    const res = await fetch(`https://api.notion.com/v1/databases/${CONFIG.NOTION_DB}/query`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${CONFIG.NOTION_TOKEN}`,
+        'Notion-Version': '2022-06-28',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ page_size: 100, sorts: [{ property: 'Service Date', direction: 'descending' }] })
+    });
+    const data = await res.json();
+    state.clients = (data.results || []).map(parseNotionRow).filter(Boolean);
+    renderClients();
+    setStatus('notion', 'live');
+
+    // Metrics
+    const thisYear = new Date().getFullYear();
+    const yearClients = state.clients.filter(c => c.serviceDate && new Date(c.serviceDate).getFullYear() === thisYear);
+    const revenue = yearClients.reduce((s, c) => s + (c.amountCollected || 0), 0);
+    const outstanding = state.clients.reduce((s, c) => s + (c.balance || 0), 0);
+    document.getElementById('m-revenue').textContent = '$' + Math.round(revenue/1000) + 'K';
+    document.getElementById('m-clients').textContent = yearClients.length;
+    document.getElementById('m-outstanding').textContent = '$' + Math.round(outstanding);
+    document.getElementById('notion-meta').textContent = state.clients.length + ' RECORDS';
+  } catch(e) {
+    el.innerHTML = `<div class="empty-state">NOTION ERROR<br>${e.message}</div>`;
+    setStatus('notion', 'error');
+  }
+}
+
+function parseNotionRow(page) {
+  const p = page.properties;
+  const get = (key, type) => {
+    const prop = p[key];
+    if (!prop) return null;
+    if (type === 'title') return prop.title?.[0]?.plain_text || null;
+    if (type === 'date') return prop.date?.start || null;
+    if (type === 'number') return prop.number || 0;
+    if (type === 'select') return prop.select?.name || null;
+    if (type === 'rich_text') return prop.rich_text?.[0]?.plain_text || null;
+    return null;
+  };
+  return {
+    id: page.id,
+    client: get('Client', 'title') || get('Name', 'title') || 'Unknown',
+    serviceDate: get('Service Date', 'date'),
+    amountCollected: get('Amount Collected', 'number') || get('Amount Col...', 'number') || 0,
+    totalValue: get('Total Value', 'number') || get('Total V...', 'number') || 0,
+    balance: get('Balance', 'number') || get('Balanc...', 'number') || 0,
+    transactionStatus: get('Transaction Status', 'select'),
+    contractStatus: get('Contract Status', 'select'),
+    serviceType: get('Service Type', 'select')
+  };
+}
+
+function renderClients() {
+  const el = document.getElementById('clientList');
+  if (!state.clients.length) { el.innerHTML = '<div class="empty-state">NO RECORDS</div>'; return; }
+
+  // Sort: outstanding first, then by date desc
+  const sorted = [...state.clients].sort((a, b) => (b.balance - a.balance) || (new Date(b.serviceDate) - new Date(a.serviceDate)));
+
+  el.innerHTML = sorted.slice(0, 40).map(c => {
+    const status = c.transactionStatus?.toLowerCase() || '';
+    let badgeClass = 'badge-pending';
+    if (status.includes('paid')) badgeClass = 'badge-paid';
+    else if (status.includes('complimentary')) badgeClass = 'badge-signed';
+    else if (c.balance > 0) badgeClass = 'badge-outstanding';
+
+    const dateStr = c.serviceDate ? new Date(c.serviceDate).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'2-digit' }) : '—';
+
+    return `<div class="client-row">
+      <div>
+        <div class="client-name">${c.client}</div>
+        <div class="client-service">${dateStr} · ${c.serviceType || '—'}</div>
+      </div>
+      <div class="amount">$${(c.amountCollected || 0).toFixed(0)}</div>
+      <div class="balance ${c.balance > 0 ? 'owed' : 'clear'}">${c.balance > 0 ? '-$'+c.balance : '✓'}</div>
+      <div class="badge ${badgeClass}">${c.transactionStatus || 'PENDING'}</div>
+    </div>`;
+  }).join('');
+}
+
+// ============================================================
+// SUPABASE INVENTORY
+// ============================================================
+async function loadInventory() {
+  const el = document.getElementById('invList');
+  try {
+    // Try business-tagged items first, fall back to all items
+    let url = `${CONFIG.SUPABASE_URL}/rest/v1/inventory?category_tag=eq.business&order=name.asc&limit=200`;
+    let res = await fetch(url, {
+      headers: { 'apikey': CONFIG.SUPABASE_ANON, 'Authorization': `Bearer ${CONFIG.SUPABASE_ANON}` }
+    });
+    let data = await res.json();
+
+    // If no business-tagged items yet, load everything
+    if (!data.length) {
+      url = `${CONFIG.SUPABASE_URL}/rest/v1/inventory?order=name.asc&limit=200`;
+      res = await fetch(url, {
+        headers: { 'apikey': CONFIG.SUPABASE_ANON, 'Authorization': `Bearer ${CONFIG.SUPABASE_ANON}` }
+      });
+      data = await res.json();
+      document.getElementById('inv-meta').textContent = 'ALL ITEMS (tag business gear to filter)';
+    } else {
+      document.getElementById('inv-meta').textContent = 'BUSINESS GEAR ONLY';
+    }
+
+    if (data.error) throw new Error(data.message);
+    state.inventory = data;
+
+    const total = data.length;
+    const inUse = data.filter(i => i.in_use).length;
+    const totalVal = data.reduce((s, i) => s + (i.est_value || 0), 0);
+
+    document.getElementById('inv-total').textContent = total;
+    document.getElementById('inv-inuse').textContent = inUse;
+    document.getElementById('inv-val').textContent = totalVal > 0 ? '$' + Math.round(totalVal/1000) + 'K' : '—';
+    document.getElementById('m-gear').textContent = total;
+
+    el.innerHTML = data.slice(0, 20).map(item => `
+      <div class="inv-item">
+        <div>
+          <div class="inv-item-name">${item.name}</div>
+          <div class="inv-item-loc">${item.location || 'No location'}</div>
+        </div>
+        <div class="inv-item-val">${item.est_value ? '$' + item.est_value : '—'}</div>
+      </div>`).join('');
+
+    setStatus('supabase', 'live');
+  } catch(e) {
+    el.innerHTML = `<div class="empty-state">INVENTORY ERROR<br>${e.message}</div>`;
+    setStatus('supabase', 'error');
+  }
+}
+
+// ============================================================
+// GOOGLE MAPS
+// ============================================================
+function loadMap() {
+  const script = document.createElement('script');
+  script.src = `https://maps.googleapis.com/maps/api/js?key=${CONFIG.GOOGLE_MAPS_KEY}&callback=initMap`;
+  script.async = true;
+  document.head.appendChild(script);
+}
+
+function initMap() {
+  state.map = new google.maps.Map(document.getElementById('map'), {
+    center: CONFIG.HOME,
+    zoom: 10,
+    styles: [
+      { elementType: 'geometry', stylers: [{ color: '#1a1a1a' }] },
+      { elementType: 'labels.text.stroke', stylers: [{ color: '#0a0a0a' }] },
+      { elementType: 'labels.text.fill', stylers: [{ color: '#888888' }] },
+      { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2a2a2a' }] },
+      { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#111111' }] },
+      { featureType: 'poi', stylers: [{ visibility: 'off' }] }
+    ]
+  });
+
+  // Home marker
+  new google.maps.Marker({
+    position: CONFIG.HOME,
+    map: state.map,
+    title: 'JD Home Base',
+    icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: '#c9a84c', fillOpacity: 1, strokeColor: '#0a0a0a', strokeWeight: 2 }
+  });
+}
+
+function updateMapMarkers() {
+  if (!state.map) return;
+  state.markers.forEach(m => m.setMap(null));
+  state.markers = [];
+  const geocoder = new google.maps.Geocoder();
+  state.events
+    .filter(e => e.calendar === 'business' && e.location)
+    .slice(0, 10)
+    .forEach(ev => {
+      geocoder.geocode({ address: ev.location }, (results, status) => {
+        if (status === 'OK') {
+          const marker = new google.maps.Marker({
+            position: results[0].geometry.location,
+            map: state.map,
+            title: ev.title,
+            icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: '#4caf7d', fillOpacity: 1, strokeColor: '#0a0a0a', strokeWeight: 2 }
+          });
+          state.markers.push(marker);
+        }
+      });
+    });
+}
+
+// ============================================================
+// CLAUDE AI CHAT
+// ============================================================
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+  appendMsg(msg, 'user');
+
+  const btn = document.getElementById('chatSend');
+  btn.disabled = true;
+  btn.textContent = '...';
+
+  // Build context summary
+  const context = buildContext();
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': CONFIG.CLAUDE_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: `You are a business assistant for JD Meyers Jr., who runs JD Meyers Productions — a photography, videography, and drone business in Potsdam, NY. You have access to his live business data shown below. Be warm, direct, and concise. No fluff.
+
+BUSINESS INFO:
+- Address: 21 Elm St, Potsdam NY 13676
+- Phone: (315) 244-4155
+- Email: jdmeyersjr@gmail.com
+- Travel fee: $0.70/mile beyond 7 miles from home
+
+LIVE DATA CONTEXT:
+${context}`,
+        messages: [{ role: 'user', content: msg }]
+      })
+    });
+    const data = await res.json();
+    const reply = data.content?.[0]?.text || 'No response.';
+    appendMsg(reply, 'ai');
+  } catch(e) {
+    appendMsg('Error connecting to Claude: ' + e.message, 'ai');
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'SEND';
+}
+
+function quickAsk(q) {
+  document.getElementById('chatInput').value = q;
+  sendChat();
+}
+
+function buildContext() {
+  let ctx = '';
+
+  if (state.clients.length) {
+    const outstanding = state.clients.filter(c => c.balance > 0);
+    ctx += `\nNOTION LEDGER (${state.clients.length} total records):\n`;
+    ctx += `Outstanding balances: ${outstanding.map(c => `${c.client} owes $${c.balance}`).join(', ') || 'None'}\n`;
+    ctx += `Recent clients: ${state.clients.slice(0, 10).map(c => `${c.client} (${c.serviceType}, ${c.transactionStatus})`).join(', ')}\n`;
+  }
+
+  if (state.events.length) {
+    ctx += `\nCALENDAR (next 60 days, ${state.events.length} events):\n`;
+    ctx += state.events.slice(0, 20).map(e => `- [${e.calendar}] ${e.title} on ${new Date(e.start).toLocaleDateString()}${e.location ? ' at ' + e.location : ''}`).join('\n') + '\n';
+  }
+
+  if (state.inventory.length) {
+    ctx += `\nINVENTORY (${state.inventory.length} business gear items):\n`;
+    ctx += state.inventory.slice(0, 20).map(i => `- ${i.name} | Location: ${i.location || 'unknown'} | In use: ${i.in_use ? 'yes' : 'no'}`).join('\n') + '\n';
+  }
+
+  return ctx || 'No live data loaded yet.';
+}
+
+function appendMsg(text, from) {
+  const container = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className = `msg msg-${from}`;
+  if (from === 'ai') {
+    div.innerHTML = `<div class="msg-label">CLAUDE</div>${text}`;
+  } else {
+    div.textContent = text;
+  }
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+</script>
+
+<!-- Google Maps loaded dynamically in JS -->
+
+</body>
+</html>
