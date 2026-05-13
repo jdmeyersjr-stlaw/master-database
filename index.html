@@ -214,20 +214,27 @@
   .client-list { display: flex; flex-direction: column; gap: 6px; max-height: 420px; overflow-y: auto; }
 
   .client-row {
-    display: grid;
-    grid-template-columns: 1fr auto auto auto;
-    gap: 12px;
-    align-items: center;
-    padding: 10px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 12px 14px;
     background: var(--surface);
     border-radius: 4px;
     font-size: 12px;
     transition: background 0.15s;
+    gap: 12px;
   }
   .client-row:hover { background: var(--surface2); }
-
-  .client-name { font-weight: 500; font-size: 13px; }
-  .client-service { font-size: 10px; color: var(--text-dim); font-family: 'DM Mono', monospace; }
+  .client-main { flex: 1; min-width: 0; }
+  .client-name { font-weight: 500; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .client-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; align-items: center; }
+  .client-meta span { font-size: 10px; color: var(--text-dim); font-family: 'DM Mono', monospace; }
+  .client-service-type { background: var(--surface2); padding: 1px 6px; border-radius: 2px; color: var(--gold) !important; }
+  .client-workflow { color: var(--teal) !important; }
+  .client-financials { display: flex; gap: 12px; align-items: center; flex-shrink: 0; }
+  .client-amounts { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+  .amount-label { font-size: 9px; color: var(--text-muted); font-family: 'DM Mono', monospace; letter-spacing: 1px; }
+  .client-badges { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; flex-shrink: 0; }
 
   .badge {
     padding: 2px 8px;
@@ -722,33 +729,30 @@ async function loadNotion() {
 function parseNotionRow(page) {
   try {
     const p = page.properties;
-
-    // Find the title property dynamically — whatever property has type 'title'
-    let clientName = '—';
-    for (const [key, val] of Object.entries(p)) {
-      if (val.type === 'title' && val.title?.length > 0) {
-        clientName = val.title[0].plain_text;
-        break;
-      }
-    }
-
-    const getNum = (...keys) => { for (const k of keys) { if (p[k]?.type === 'number' && typeof p[k].number === 'number') return p[k].number; } return 0; };
+    const getRich = (...keys) => { for (const k of keys) { if (p[k]?.rich_text?.[0]?.plain_text) return p[k].rich_text[0].plain_text; if (p[k]?.text?.[0]?.plain_text) return p[k].text[0].plain_text; } return null; };
+    const getTitle = (...keys) => { for (const k of keys) { if (p[k]?.title?.[0]?.plain_text) return p[k].title[0].plain_text; } return null; };
+    const getNum = (...keys) => { for (const k of keys) { if (p[k] && typeof p[k].number === 'number') return p[k].number; } return 0; };
     const getDate = (...keys) => { for (const k of keys) { if (p[k]?.date?.start) return p[k].date.start; } return null; };
     const getSelect = (...keys) => { for (const k of keys) { if (p[k]?.select?.name) return p[k].select.name; } return null; };
-    const getRich = (...keys) => { for (const k of keys) { if (p[k]?.rich_text?.[0]?.plain_text) return p[k].rich_text[0].plain_text; } return null; };
+    const getFormula = (...keys) => { for (const k of keys) { if (p[k]?.formula) { const f = p[k].formula; return f.number ?? f.string ?? null; } } return null; };
 
     return {
       id: page.id,
-      client: clientName,
+      projectId: getTitle('Project ID') || '—',
+      client: getRich('Client') || '—',
       serviceDate: getDate('Service Date'),
-      amountCollected: getNum('Amount Collected', 'Amount Col...'),
-      totalValue: getNum('Total Value', 'Total V...'),
-      balance: getNum('Balance', 'Balanc...'),
+      amountCollected: getNum('Amount Collected'),
+      totalValue: getNum('Total Value'),
+      balanceDue: getFormula('Balance Due') || getNum('Balance Due'),
       transactionStatus: getSelect('Transaction Status'),
       contractStatus: getSelect('Contract Status'),
       serviceType: getSelect('Service Type'),
-      location: getRich('Location'),
-      projectId: getRich('Project ID')
+      clientStatus: getSelect('Client Status'),
+      turnaround: getSelect('Turnaround'),
+      estimatedDelivery: getRich('Estimated Delivery'),
+      galleryLink: getRich('Gallery Link'),
+      notes: getRich('Notes'),
+      serviceFulfilled: p['Service Fulfilled']?.checkbox || false
     };
   } catch(e) { return null; }
 }
@@ -757,26 +761,63 @@ function renderClients() {
   const el = document.getElementById('clientList');
   if (!state.clients.length) { el.innerHTML = '<div class="empty-state">NO RECORDS</div>'; return; }
 
-  // Sort: outstanding first, then by date desc
-  const sorted = [...state.clients].sort((a, b) => (b.balance - a.balance) || (new Date(b.serviceDate) - new Date(a.serviceDate)));
+  const sorted = [...state.clients].sort((a, b) => {
+    if (!a.serviceDate) return 1;
+    if (!b.serviceDate) return -1;
+    return new Date(a.serviceDate) - new Date(b.serviceDate);
+  });
 
-  el.innerHTML = sorted.slice(0, 40).map(c => {
-    const status = c.transactionStatus?.toLowerCase() || '';
-    let badgeClass = 'badge-pending';
-    if (status.includes('paid')) badgeClass = 'badge-paid';
-    else if (status.includes('complimentary')) badgeClass = 'badge-signed';
-    else if (c.balance > 0) badgeClass = 'badge-outstanding';
+  const txBadge = (s) => {
+    if (!s) return `<span class="badge badge-pending">—</span>`;
+    const map = {
+      'Paid': 'badge-paid', 'Deposit Paid': 'badge-signed', 'Signed': 'badge-signed',
+      'Negotiating': 'badge-pending', 'Awaiting Availability': 'badge-pending',
+      'Pending': 'badge-pending', 'Overdue': 'badge-outstanding',
+      'Cancelled': 'badge-outstanding', 'Complimentary': 'badge-signed', 'Exchange': 'badge-signed'
+    };
+    return `<span class="badge ${map[s] || 'badge-pending'}">${s}</span>`;
+  };
 
-    const dateStr = c.serviceDate ? new Date(c.serviceDate).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'2-digit' }) : '—';
+  const contractBadge = (s) => {
+    if (!s) return '';
+    const map = {
+      'Paid in Full': 'badge-paid', 'Deposit Received': 'badge-signed',
+      'Signed - Unpaid': 'badge-signed', 'Sent': 'badge-pending',
+      'Not Started': 'badge-pending', 'Cancelled/Lost': 'badge-outstanding'
+    };
+    return `<span class="badge ${map[s] || 'badge-pending'}">${s}</span>`;
+  };
 
+  el.innerHTML = sorted.map(c => {
+    const dateStr = c.serviceDate ? new Date(c.serviceDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : '—';
+    const balance = c.balanceDue || (c.totalValue - c.amountCollected);
     return `<div class="client-row">
-      <div>
-        <div class="client-name">${c.client}</div>
-        <div class="client-service">${dateStr} · ${c.serviceType || '—'}</div>
+      <div class="client-main">
+        <div class="client-name">${c.client !== '—' ? c.client : c.projectId}</div>
+        <div class="client-meta">
+          <span>${dateStr}</span>
+          ${c.serviceType ? `<span class="client-service-type">${c.serviceType}</span>` : ''}
+          ${c.clientStatus ? `<span class="client-workflow">${c.clientStatus}</span>` : ''}
+        </div>
       </div>
-      <div class="amount">$${(c.amountCollected || 0).toFixed(0)}</div>
-      <div class="balance ${c.balance > 0 ? 'owed' : 'clear'}">${c.balance > 0 ? '-$'+c.balance : '✓'}</div>
-      <div class="badge ${badgeClass}">${c.transactionStatus || 'PENDING'}</div>
+      <div class="client-financials">
+        <div class="client-amounts">
+          <span class="amount-label">COLLECTED</span>
+          <span class="amount">$${(c.amountCollected || 0).toLocaleString()}</span>
+        </div>
+        ${c.totalValue ? `<div class="client-amounts">
+          <span class="amount-label">TOTAL</span>
+          <span class="amount">$${c.totalValue.toLocaleString()}</span>
+        </div>` : ''}
+        ${balance > 0 ? `<div class="client-amounts">
+          <span class="amount-label">BALANCE</span>
+          <span class="balance owed">-$${balance.toLocaleString()}</span>
+        </div>` : ''}
+      </div>
+      <div class="client-badges">
+        ${txBadge(c.transactionStatus)}
+        ${contractBadge(c.contractStatus)}
+      </div>
     </div>`;
   }).join('');
 }
