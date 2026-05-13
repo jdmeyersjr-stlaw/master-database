@@ -585,7 +585,7 @@
 const CONFIG = {
   CLAUDE_API_KEY: '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',
   GOOGLE_MAPS_KEY: 'AIzaSyDsxCJjB-oJ4YG3MtYp0Z8cDJYFCjcG9pM',
-  SUPABASE_URL: 'https://ixeigpmuewzrkhhJmqbt.supabase.co',
+  SUPABASE_URL: 'https://ixeigpmuewzrkhhjmqbt.supabase.co',
   SUPABASE_ANON: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml4ZWlncG11ZXd6cmtoaGptcWJ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2MTA5NjksImV4cCI6MjA5NDE4Njk2OX0.Kz4TjRsRP4YTQ9ZOVIfffGz-qYlmN8IJ1DgO2OpI1XI',
   NOTION_TOKEN: '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',
   NOTION_DB: '0953190b70144672b7d7be479e21a9ce',
@@ -633,15 +633,14 @@ function setStatus(key, status) {
 // ============================================================
 async function loadCalendar() {
   const el = document.getElementById('eventList');
-  if (CONFIG.APPS_SCRIPT_URL === 'PASTE_APPS_SCRIPT_WEB_APP_URL_HERE') {
-    el.innerHTML = `<div class="pending-notice">⚠ Apps Script URL not yet configured. Deploy the Google Apps Script and paste the Web App URL into CONFIG.APPS_SCRIPT_URL in this file.</div>`;
-    setStatus('cal', 'error');
-    document.getElementById('cal-meta').textContent = 'PENDING SETUP';
-    document.getElementById('m-upcoming').textContent = '—';
-    return;
-  }
   try {
-    const res = await fetch(CONFIG.APPS_SCRIPT_URL);
+    // Use no-cors mode won't work for JSON, so we load via script tag trick
+    // Apps Script must be deployed with "Anyone" access
+    const res = await fetch(CONFIG.APPS_SCRIPT_URL + '?t=' + Date.now(), {
+      method: 'GET',
+      mode: 'cors'
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     state.events = data.events || [];
     renderCalendar();
@@ -686,26 +685,49 @@ function toggleCal(cal, el) {
 }
 
 // ============================================================
-// NOTION CRM
+// NOTION CRM — via Claude API (Notion blocks direct browser CORS)
 // ============================================================
 async function loadNotion() {
   const el = document.getElementById('clientList');
   try {
-    const res = await fetch(`https://api.notion.com/v1/databases/${CONFIG.NOTION_DB}/query`, {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${CONFIG.NOTION_TOKEN}`,
-        'Notion-Version': '2022-06-28',
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'x-api-key': CONFIG.CLAUDE_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
       },
-      body: JSON.stringify({ page_size: 100, sorts: [{ property: 'Service Date', direction: 'descending' }] })
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4000,
+        system: 'You are a data relay. You will be given Notion API credentials. Make the API call and return ONLY a raw JSON array — no markdown, no explanation, no backticks. Just the JSON array.',
+        messages: [{
+          role: 'user',
+          content: `Call this Notion API and return the results as a JSON array:
+
+POST https://api.notion.com/v1/databases/${CONFIG.NOTION_DB}/query
+Authorization: Bearer ${CONFIG.NOTION_TOKEN}
+Notion-Version: 2022-06-28
+Content-Type: application/json
+Body: {"page_size": 100}
+
+Parse each result and return a JSON array where each object has: client, serviceDate, amountCollected, totalValue, balance, transactionStatus, contractStatus, serviceType.
+Return ONLY the JSON array.`
+        }]
+      })
     });
-    const data = await res.json();
-    state.clients = (data.results || []).map(parseNotionRow).filter(Boolean);
+
+    const claudeData = await res.json();
+    const textBlock = claudeData.content?.find(b => b.type === 'text');
+    if (!textBlock) throw new Error('No response from Claude');
+    let jsonStr = textBlock.text.trim().replace(/^```json|^```|```$/gm, '').trim();
+    const clients = JSON.parse(jsonStr);
+    if (!Array.isArray(clients)) throw new Error('Invalid data format');
+    state.clients = clients;
     renderClients();
     setStatus('notion', 'live');
 
-    // Metrics
     const thisYear = new Date().getFullYear();
     const yearClients = state.clients.filter(c => c.serviceDate && new Date(c.serviceDate).getFullYear() === thisYear);
     const revenue = yearClients.reduce((s, c) => s + (c.amountCollected || 0), 0);
@@ -718,31 +740,6 @@ async function loadNotion() {
     el.innerHTML = `<div class="empty-state">NOTION ERROR<br>${e.message}</div>`;
     setStatus('notion', 'error');
   }
-}
-
-function parseNotionRow(page) {
-  const p = page.properties;
-  const get = (key, type) => {
-    const prop = p[key];
-    if (!prop) return null;
-    if (type === 'title') return prop.title?.[0]?.plain_text || null;
-    if (type === 'date') return prop.date?.start || null;
-    if (type === 'number') return prop.number || 0;
-    if (type === 'select') return prop.select?.name || null;
-    if (type === 'rich_text') return prop.rich_text?.[0]?.plain_text || null;
-    return null;
-  };
-  return {
-    id: page.id,
-    client: get('Client', 'title') || get('Name', 'title') || 'Unknown',
-    serviceDate: get('Service Date', 'date'),
-    amountCollected: get('Amount Collected', 'number') || get('Amount Col...', 'number') || 0,
-    totalValue: get('Total Value', 'number') || get('Total V...', 'number') || 0,
-    balance: get('Balance', 'number') || get('Balanc...', 'number') || 0,
-    transactionStatus: get('Transaction Status', 'select'),
-    contractStatus: get('Contract Status', 'select'),
-    serviceType: get('Service Type', 'select')
-  };
 }
 
 function renderClients() {
@@ -786,8 +783,8 @@ async function loadInventory() {
     });
     let data = await res.json();
 
-    // If no business-tagged items yet, load everything
-    if (!data.length) {
+    // If no business-tagged items yet (or error), load everything
+    if (!Array.isArray(data) || !data.length) {
       url = `${CONFIG.SUPABASE_URL}/rest/v1/inventory?order=name.asc&limit=200`;
       res = await fetch(url, {
         headers: { 'apikey': CONFIG.SUPABASE_ANON, 'Authorization': `Bearer ${CONFIG.SUPABASE_ANON}` }
@@ -798,7 +795,7 @@ async function loadInventory() {
       document.getElementById('inv-meta').textContent = 'BUSINESS GEAR ONLY';
     }
 
-    if (data.error) throw new Error(data.message);
+    if (data.error || !Array.isArray(data)) throw new Error(data.message || 'Invalid response from Supabase');
     state.inventory = data;
 
     const total = data.length;
