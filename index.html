@@ -685,12 +685,13 @@ function toggleCal(cal, el) {
 }
 
 // ============================================================
-// NOTION CRM — direct fetch
+// NOTION CRM — via Cloudflare Worker proxy (bypasses CORS)
 // ============================================================
 async function loadNotion() {
   const el = document.getElementById('clientList');
   try {
-    const res = await fetch(`https://api.notion.com/v1/databases/${CONFIG.NOTION_DB}/query`, {
+    const proxyBase = 'https://master-db.jdmeyersjr.workers.dev';
+    const res = await fetch(`${proxyBase}/v1/databases/${CONFIG.NOTION_DB}/query`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${CONFIG.NOTION_TOKEN}`,
