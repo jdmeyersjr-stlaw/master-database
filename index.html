@@ -583,13 +583,13 @@
 // CONFIG
 // ============================================================
 const CONFIG = {
-  CLAUDE_API_KEY: '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',
+  CLAUDE_API_KEY: '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',
   GOOGLE_MAPS_KEY: 'AIzaSyDsxCJjB-oJ4YG3MtYp0Z8cDJYFCjcG9pM',
   SUPABASE_URL: 'https://ixeigpmuewzrkhhjmqbt.supabase.co',
   SUPABASE_ANON: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml4ZWlncG11ZXd6cmtoaGptcWJ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2MTA5NjksImV4cCI6MjA5NDE4Njk2OX0.Kz4TjRsRP4YTQ9ZOVIfffGz-qYlmN8IJ1DgO2OpI1XI',
   NOTION_TOKEN: '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',
   NOTION_DB: '0953190b70144672b7d7be479e21a9ce',
-  APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbz5YbJ2GoHR9amXkgXIdtmZLbFvhhQokWKCeNHSIfK_gVYQzymvM6UMnCESJduPWpSu/exec',
+  APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbx1IFLr_jjd_YHI7tGrlKlQ9XPfFrsOuYwA4JjocQIxRzVaTzt2QN3EdhBlAINaBvKw/exec',
   HOME: { lat: 44.6698, lng: -74.9864, label: '21 Elm St, Potsdam NY' }
 };
 
@@ -795,12 +795,12 @@ async function loadInventory() {
       document.getElementById('inv-meta').textContent = 'BUSINESS GEAR ONLY';
     }
 
-    if (data.error || !Array.isArray(data)) throw new Error(data.message || 'Invalid response from Supabase');
+    if (!Array.isArray(data)) throw new Error(data.message || 'Invalid response from Supabase');
     state.inventory = data;
 
     const total = data.length;
     const inUse = data.filter(i => i.in_use).length;
-    const totalVal = data.reduce((s, i) => s + (i.est_value || 0), 0);
+    const totalVal = data.reduce((s, i) => s + (parseFloat(i.est_value) || 0), 0);
 
     document.getElementById('inv-total').textContent = total;
     document.getElementById('inv-inuse').textContent = inUse;
@@ -810,8 +810,8 @@ async function loadInventory() {
     el.innerHTML = data.slice(0, 20).map(item => `
       <div class="inv-item">
         <div>
-          <div class="inv-item-name">${item.name}</div>
-          <div class="inv-item-loc">${item.location || 'No location'}</div>
+          <div class="inv-item-name">${item.name || 'Unnamed'}</div>
+          <div class="inv-item-loc">${item.location || 'No location'} ${item.category ? '· ' + item.category : ''}</div>
         </div>
         <div class="inv-item-val">${item.est_value ? '$' + item.est_value : '—'}</div>
       </div>`).join('');
